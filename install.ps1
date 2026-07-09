@@ -152,25 +152,36 @@ if (Test-Path $OpenCodeDir) {
         $Content | Set-Content -Path $OpenCodeConfig -Encoding UTF8
     }
 
-    $Json = if (Test-Path $OpenCodeConfig) {
-        Get-Content $OpenCodeConfig -Raw | ConvertFrom-Json
-    } else {
-        [pscustomobject]@{ '$schema' = "https://opencode.ai/config.json" }
-    }
-    if (-not $Json.PSObject.Properties['mcp']) {
-        $Json | Add-Member -NotePropertyName mcp -NotePropertyValue ([pscustomobject]@{})
-    }
-    if ($Json.mcp.PSObject.Properties['alux']) {
-        Say "OpenCode: el MCP 'alux' ya estaba registrado."
-    } else {
-        $Json.mcp | Add-Member -NotePropertyName alux -NotePropertyValue ([pscustomobject]@{
-            type    = "local"
-            command = @($AluxBin)
-            enabled = $true
-        })
-        New-Item -ItemType Directory -Force -Path $OpenCodeDir | Out-Null
-        $Json | ConvertTo-Json -Depth 10 | Set-Content -Path $OpenCodeConfig -Encoding UTF8
-        Say "OpenCode: MCP 'alux' registrado."
+    # Buscar opencode.json o opencode.jsonc
+    $OpenCodeConfig = Join-Path $OpenCodeDir "opencode.json"
+    $OpenCodeConfigC = Join-Path $OpenCodeDir "opencode.jsonc"
+
+    # Procesar ambos archivos si existen
+    foreach ($CfgFile in @($OpenCodeConfig, $OpenCodeConfigC)) {
+        if (-not (Test-Path $CfgFile)) { continue }
+
+        $Content = Get-Content $CfgFile -Raw
+        if ($Content -match '"alux"') {
+            Say "OpenCode ($CfgFile): MCP 'alux' ya estaba registrado."
+            continue
+        }
+
+        $Json = $Content | ConvertFrom-Json
+        if (-not $Json.PSObject.Properties['mcp']) {
+            $Json | Add-Member -NotePropertyName mcp -NotePropertyValue ([pscustomobject]@{})
+        }
+        if ($Json.mcp.PSObject.Properties['alux']) {
+            Say "OpenCode ($CfgFile): MCP 'alux' ya estaba registrado."
+        } else {
+            $Json.mcp | Add-Member -NotePropertyName alux -NotePropertyValue ([pscustomobject]@{
+                type    = "local"
+                command = @($AluxBin)
+                enabled = $true
+            })
+            New-Item -ItemType Directory -Force -Path $OpenCodeDir | Out-Null
+            $Json | ConvertTo-Json -Depth 10 | Set-Content -Path $CfgFile -Encoding UTF8
+            Say "OpenCode ($CfgFile): MCP 'alux' registrado."
+        }
     }
 } else {
     Say "OpenCode no detectado (directorio $OpenCodeDir no existe); se omite."

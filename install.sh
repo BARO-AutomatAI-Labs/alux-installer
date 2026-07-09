@@ -133,33 +133,63 @@ if [ -d "$OPENCODE_DIR" ]; then
   OPENCODE_JSON="$OPENCODE_DIR/opencode.json"
   OPENCODE_JSONC="$OPENCODE_DIR/opencode.jsonc"
 
-  if [ -f "$OPENCODE_JSONC" ] && [ ! -f "$OPENCODE_JSON" ]; then
-    # Normalizar .jsonc a .json (strip comments) para editar
-    "$TOOL_PY" - "$OPENCODE_JSONC" "$OPENCODE_JSON" <<'PYEOF'
+  # Editar .json (siempre) y .jsonc (si existe) para asegurar que alux
+  # esté registrado sin importar cuál archivo lea OpenCode Desktop.
+  for CFG_FILE in "$OPENCODE_JSON" "$OPENCODE_JSONC"; do
+    [ -f "$CFG_FILE" ] || continue
+    RESULT="$("$TOOL_PY" - "$CFG_FILE" "$ALUX_BIN" <<'PYEOF'
 import json, re, sys
 from pathlib import Path
 
-src = Path(sys.argv[1])
-dst = Path(sys.argv[2])
-text = src.read_text()
-# Strip single-line comments
-text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
-# Strip multi-line comments (simple, no nested)
-text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-# Remove trailing commas before } or ]
-text = re.sub(r',(\s*[}\]])', r'\1', text)
-data = json.loads(text)
-dst.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-PYEOF
-    OPENCODE_JSON="$OPENCODE_JSONC"  # seguimos usando .jsonc como referencia
-  fi
-
-  RESULT="$("$TOOL_PY" - "$OPENCODE_DIR/opencode.json" "$ALUX_BIN" <<'PYEOF'
-import json, sys
-from pathlib import Path
-
 path, alux_bin = Path(sys.argv[1]), sys.argv[2]
-config = json.loads(path.read_text()) if path.is_file() else {
+text = path.read_text()
+
+# Si ya existe alux, nada que hacer
+if '"alux"' in text:
+    print("ya")
+    sys.exit(0)
+
+# Si tiene comments (.jsonc), intentar parsear como JSON limpio primero.
+# La mayoría de archivos .jsonc de OpenCode no tienen comments reales.
+if path.suffix == ".jsonc":
+    try:
+        config = json.loads(text)
+        mcp = config.setdefault("mcp", {})
+        if "alux" not in mcp:
+            mcp["alux"] = {"type": "local", "command": [alux_bin], "enabled": True}
+            path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n")
+            print("ok")
+        else:
+            print("ya")
+        sys.exit(0)
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: editar como texto (preservar comments)
+    mcp_match = re.search(r'("mcp"\s*:\s*\{)', text)
+    if mcp_match:
+        start = mcp_match.end()
+        depth = 1
+        i = start
+        while i < len(text) and depth > 0:
+            if text[i] == '{': depth += 1
+            elif text[i] == '}': depth -= 1
+            i += 1
+        insert_pos = i - 1
+        entry = (f',\n    "alux": {{\n'
+                 f'      "type": "local",\n'
+                 f'      "command": ["{alux_bin}"],\n'
+                 f'      "enabled": true\n'
+                 f'    }}')
+        text = text[:insert_pos] + entry + text[insert_pos:]
+        path.write_text(text)
+        print("ok")
+    else:
+        print("no_mcp")
+    sys.exit(0)
+
+# Formato plano .json
+config = json.loads(text) if text.strip() else {
     "$schema": "https://opencode.ai/config.json"
 }
 mcp = config.setdefault("mcp", {})
@@ -172,11 +202,14 @@ else:
     print("ok")
 PYEOF
 )"
-  if [ "$RESULT" = "ya" ]; then
-    say "OpenCode: MCP 'alux' ya estaba registrado."
-  else
-    say "OpenCode: MCP 'alux' registrado."
-  fi
+    if [ "$RESULT" = "ya" ]; then
+      say "OpenCode ($CFG_FILE): MCP 'alux' ya estaba registrado."
+    elif [ "$RESULT" = "ok" ]; then
+      say "OpenCode ($CFG_FILE): MCP 'alux' registrado."
+    elif [ "$RESULT" = "no_mcp" ]; then
+      say "OpenCode ($CFG_FILE): no se encontro bloque 'mcp'."
+    fi
+  done
 else
   say "OpenCode no detectado (directorio $OPENCODE_DIR no existe); se omite."
 fi
