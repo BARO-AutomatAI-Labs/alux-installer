@@ -64,7 +64,8 @@ fi
 
 # --- 3. Instalar alux desde el directorio clonado ---------------------------
 say "Instalando alux desde $TARGET_DIR..."
-uv tool install --force --reinstall "$TARGET_DIR"
+# Instalar con todos los extras para soportar PostgreSQL, MySQL, SQL Server y Oracle
+uv tool install --force --reinstall "$TARGET_DIR[all]"
 
 BIN_DIR="$(uv tool dir --bin)"
 ALUX_BIN="$BIN_DIR/alux"
@@ -101,9 +102,13 @@ if [ -f "$TARGET_DIR/master.example.toml" ]; then
     say "Master config ya existe en $CONFIG_DIR/master.toml (no se modifica)."
   fi
 
-  cp "$TARGET_DIR/scripts/alux-preflight" "$CONFIG_DIR/bin/alux-preflight"
+  # Crear wrapper que use el Python del entorno de alux (con todos los drivers)
+  cat > "$CONFIG_DIR/bin/alux-preflight" <<EOF
+#!/bin/sh
+exec "$TOOL_PY" "$TARGET_DIR/scripts/alux-preflight" "\$@"
+EOF
   chmod +x "$CONFIG_DIR/bin/alux-preflight"
-  say "Preflight generator copiado a $CONFIG_DIR/bin/alux-preflight."
+  say "Preflight generator copiado a $CONFIG_DIR/bin/alux-preflight (wrapper con entorno alux)."
 fi
 
 # --- 5. Claude Code -----------------------------------------------------------
@@ -121,7 +126,34 @@ fi
 
 # --- 6. OpenCode --------------------------------------------------------------
 OPENCODE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
-if command -v opencode >/dev/null 2>&1 || [ -d "$OPENCODE_DIR" ]; then
+# Siempre intentar registrar si el directorio de config de OpenCode existe
+# (OpenCode Desktop no siempre expone un comando "opencode" en PATH).
+if [ -d "$OPENCODE_DIR" ]; then
+  # Buscar opencode.json o opencode.jsonc
+  OPENCODE_JSON="$OPENCODE_DIR/opencode.json"
+  OPENCODE_JSONC="$OPENCODE_DIR/opencode.jsonc"
+
+  if [ -f "$OPENCODE_JSONC" ] && [ ! -f "$OPENCODE_JSON" ]; then
+    # Normalizar .jsonc a .json (strip comments) para editar
+    "$TOOL_PY" - "$OPENCODE_JSONC" "$OPENCODE_JSON" <<'PYEOF'
+import json, re, sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+text = src.read_text()
+# Strip single-line comments
+text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
+# Strip multi-line comments (simple, no nested)
+text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+# Remove trailing commas before } or ]
+text = re.sub(r',(\s*[}\]])', r'\1', text)
+data = json.loads(text)
+dst.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PYEOF
+    OPENCODE_JSON="$OPENCODE_JSONC"  # seguimos usando .jsonc como referencia
+  fi
+
   RESULT="$("$TOOL_PY" - "$OPENCODE_DIR/opencode.json" "$ALUX_BIN" <<'PYEOF'
 import json, sys
 from pathlib import Path
@@ -146,7 +178,7 @@ PYEOF
     say "OpenCode: MCP 'alux' registrado."
   fi
 else
-  say "OpenCode no detectado; se omite."
+  say "OpenCode no detectado (directorio $OPENCODE_DIR no existe); se omite."
 fi
 
 say ""

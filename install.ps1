@@ -64,7 +64,8 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 
 # --- 3. Instalar alux desde el directorio clonado -----------------------------
 Say "Instalando alux desde $TargetDir..."
-uv tool install --force --reinstall $TargetDir
+# Instalar con todos los extras para soportar PostgreSQL, MySQL, SQL Server y Oracle
+uv tool install --force --reinstall "$TargetDir[all]"
 if ($LASTEXITCODE -ne 0) { throw "uv tool install fallo." }
 
 $BinDir = (uv tool dir --bin).Trim()
@@ -105,10 +106,15 @@ if (Test-Path $MasterExample) {
         Say "Master config ya existe en $MasterToml (no se modifica)."
     }
 
+    # Crear wrapper que use el Python del entorno de alux (con todos los drivers)
     $PreflightSrc = Join-Path $TargetDir "scripts\alux-preflight"
     $PreflightDst = Join-Path $BinDir "alux-preflight"
-    Copy-Item $PreflightSrc $PreflightDst -Force
-    Say "Preflight generator copiado a $PreflightDst."
+    $ToolPy = (Join-Path (uv tool dir) "alux\bin\python.exe")
+    @"
+@echo off
+"$ToolPy" "$PreflightSrc" %*
+"@ | Set-Content -Path $PreflightDst -Encoding UTF8
+    Say "Preflight generator copiado a $PreflightDst (wrapper con entorno alux)."
 }
 
 # --- 5. Claude Code -----------------------------------------------------------
@@ -128,8 +134,24 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 
 # --- 6. OpenCode ---------------------------------------------------------------
 $OpenCodeDir = Join-Path $env:USERPROFILE ".config\opencode"
-if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path $OpenCodeDir)) {
+# Siempre intentar registrar si el directorio de config de OpenCode existe
+# (OpenCode Desktop no siempre expone un comando "opencode" en PATH).
+if (Test-Path $OpenCodeDir) {
     $OpenCodeConfig = Join-Path $OpenCodeDir "opencode.json"
+    $OpenCodeConfigC = Join-Path $OpenCodeDir "opencode.jsonc"
+
+    # Si existe .jsonc pero no .json, normalizar primero
+    if ((Test-Path $OpenCodeConfigC) -and -not (Test-Path $OpenCodeConfig)) {
+        $Content = Get-Content $OpenCodeConfigC -Raw
+        # Strip single-line comments
+        $Content = $Content -replace '//.*$', ''
+        # Strip multi-line comments (simple, no nested)
+        $Content = $Content -replace '/\*.*?\*/', ''
+        # Remove trailing commas before } or ]
+        $Content = $Content -replace ',(\s*[}\]])', '$1'
+        $Content | Set-Content -Path $OpenCodeConfig -Encoding UTF8
+    }
+
     $Json = if (Test-Path $OpenCodeConfig) {
         Get-Content $OpenCodeConfig -Raw | ConvertFrom-Json
     } else {
@@ -151,7 +173,7 @@ if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path $OpenCod
         Say "OpenCode: MCP 'alux' registrado."
     }
 } else {
-    Say "OpenCode no detectado; se omite."
+    Say "OpenCode no detectado (directorio $OpenCodeDir no existe); se omite."
 }
 
 Say ""
