@@ -9,7 +9,8 @@ Este repositorio contiene los scripts de instalación para cualquier plataforma.
 1. **Clona** el repositorio privado [`BARO-AutomatAI-Labs/alux`](https://github.com/BARO-AutomatAI-Labs/alux) en tu máquina local (`~/.alux` en Unix, `%USERPROFILE%\.alux` en Windows).
 2. **Instala** el paquete Python `alux` como herramienta global usando [uv](https://docs.astral.sh/uv/).
 3. **Crea** la configuración por defecto en `~/.config/alux/config.toml` (Unix) o `%APPDATA%\alux\config.toml` (Windows).
-4. **Registra** automáticamente el MCP en **Claude Code** (scope `user`) y en **OpenCode** si están instalados.
+4. **Copia** la plantilla multitenant (`master.example.toml` → `master.toml`) y el generador `alux-preflight` a `~/.config/alux/bin/` para facilitar la gestión de múltiples instancias/bases.
+5. **Registra** automáticamente el MCP en **Claude Code** (scope `user`) y en **OpenCode** si están instalados.
 
 ## Requisitos
 

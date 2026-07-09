@@ -91,6 +91,26 @@ description = "SQLite de demostracion"
     Say "Config creada en $Config — editala para agregar tus bases de datos."
 }
 
+# --- 4b. Multitenant preflight (opcional) --------------------------------------
+$MasterExample = Join-Path $TargetDir "master.example.toml"
+if (Test-Path $MasterExample) {
+    $BinDir = Join-Path $ConfigDir "bin"
+    New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+
+    $MasterToml = Join-Path $ConfigDir "master.toml"
+    if (-not (Test-Path $MasterToml)) {
+        Copy-Item $MasterExample $MasterToml
+        Say "Master config copiado a $MasterToml (personalizalo)."
+    } else {
+        Say "Master config ya existe en $MasterToml (no se modifica)."
+    }
+
+    $PreflightSrc = Join-Path $TargetDir "scripts\alux-preflight"
+    $PreflightDst = Join-Path $BinDir "alux-preflight"
+    Copy-Item $PreflightSrc $PreflightDst -Force
+    Say "Preflight generator copiado a $PreflightDst."
+}
+
 # --- 5. Claude Code -----------------------------------------------------------
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     claude mcp get alux *> $null

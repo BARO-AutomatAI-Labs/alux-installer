@@ -90,6 +90,22 @@ EOF
   say "Config creada en $CONFIG — edítala para agregar tus bases de datos."
 fi
 
+# --- 4b. Multitenant preflight (opcional) ------------------------------------
+if [ -f "$TARGET_DIR/master.example.toml" ]; then
+  mkdir -p "$CONFIG_DIR/bin"
+
+  if [ ! -f "$CONFIG_DIR/master.toml" ]; then
+    cp "$TARGET_DIR/master.example.toml" "$CONFIG_DIR/master.toml"
+    say "Master config copiado a $CONFIG_DIR/master.toml (personalízalo)."
+  else
+    say "Master config ya existe en $CONFIG_DIR/master.toml (no se modifica)."
+  fi
+
+  cp "$TARGET_DIR/scripts/alux-preflight" "$CONFIG_DIR/bin/alux-preflight"
+  chmod +x "$CONFIG_DIR/bin/alux-preflight"
+  say "Preflight generator copiado a $CONFIG_DIR/bin/alux-preflight."
+fi
+
 # --- 5. Claude Code -----------------------------------------------------------
 if command -v claude >/dev/null 2>&1; then
   if claude mcp get alux >/dev/null 2>&1; then
