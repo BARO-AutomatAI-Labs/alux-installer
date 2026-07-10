@@ -117,6 +117,33 @@ if (Test-Path $MasterExample) {
     Say "Preflight generator copiado a $PreflightDst (wrapper con entorno alux)."
 }
 
+# --- 4c. Verificar .env (necesario para interpolación de credenciales) ------
+$EnvFile = Join-Path $ConfigDir ".env"
+if (Test-Path $EnvFile) {
+    try {
+        $acl = Get-Acl $EnvFile
+        $owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $hasOthers = $false
+        foreach ($rule in $acl.Access) {
+            if ($rule.IdentityReference.Value -ne $owner -and $rule.FileSystemRights -ne "None") {
+                $hasOthers = $true
+                break
+            }
+        }
+        if ($hasOthers) {
+            Write-Host "[alux] WARNING: $EnvFile has permissive ACL — consider restricting access." -ForegroundColor Yellow
+        }
+    } catch {
+        # Best-effort
+    }
+} else {
+    if (Test-Path $MasterToml) {
+        Say "No se encontro $EnvFile. Crealo con tus credenciales para que master.toml funcione:"
+        Say "  Add-Content -Path $EnvFile -Value 'ALUX_DB_USER=tu_usuario'"
+        Say "  Add-Content -Path $EnvFile -Value 'ALUX_DB_PASS=tu_password'"
+    }
+}
+
 # --- 5. Claude Code -----------------------------------------------------------
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     claude mcp get alux *> $null

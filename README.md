@@ -53,19 +53,47 @@ ALUX_REPO=mi-org/alux-fork ALUX_DIR=/opt/alux sh install.sh
 - Se crea el archivo de configuración con una base de datos SQLite de demostración.
 - El servidor MCP se registra en Claude Code y OpenCode, estando listo para usarse en cualquier proyecto.
 
+## Credenciales y `.env`
+
+Si usas el modo multitenant (`master.toml` + `alux-preflight`), las URLs en `config.toml` usan placeholders como `${ALUX_DB_USER}` y `${ALUX_DB_PASS}`. El servidor MCP carga automáticamente `~/.config/alux/.env` (o `%APPDATA%\alux\.env` en Windows) para resolver estas variables.
+
+Crea tu `.env` con permisos restrictivos:
+
+```bash
+# Linux / macOS
+cat > ~/.config/alux/.env <<EOF
+ALUX_DB_USER=tu_usuario
+ALUX_DB_PASS=tu_password
+EOF
+chmod 600 ~/.config/alux/.env
+```
+
+```powershell
+# Windows (PowerShell)
+$EnvFile = Join-Path $env:APPDATA "alux\.env"
+Set-Content -Path $EnvFile -Value "ALUX_DB_USER=tu_usuario" -Encoding UTF8
+Add-Content -Path $EnvFile -Value "ALUX_DB_PASS=tu_password" -Encoding UTF8
+```
+
 ## Actualización
 
 Para actualizar `alux` cuando haya cambios en el repo privado:
 
-### Linux / macOS
+### Opción 1: comando nativo `alux update` (recomendado)
 
 ```bash
+alux update
+```
+
+### Opción 2: manual
+
+```bash
+# Linux / macOS
 cd ~/.alux && git pull && uv tool install --reinstall .
 ```
 
-### Windows
-
 ```powershell
+# Windows
 cd ~/.alux; git pull; uv tool install --reinstall .
 ```
 

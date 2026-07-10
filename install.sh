@@ -111,6 +111,22 @@ EOF
   say "Preflight generator copiado a $CONFIG_DIR/bin/alux-preflight (wrapper con entorno alux)."
 fi
 
+# --- 4c. Verificar .env (necesario para interpolación de credenciales) ------
+ENV_FILE="$CONFIG_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+  ENV_PERMS=$(stat -c %a "$ENV_FILE" 2>/dev/null || stat -f %Lp "$ENV_FILE" 2>/dev/null)
+  if [ -n "$ENV_PERMS" ] && [ "$ENV_PERMS" != "600" ]; then
+    printf '\033[1;33m[alux] WARNING:\033[0m %s has permissions %s — run: chmod 600 %s\n' "$ENV_FILE" "$ENV_PERMS" "$ENV_FILE"
+  fi
+else
+  if [ -f "$CONFIG_DIR/master.toml" ]; then
+    say "No se encontro $ENV_FILE. Crealo con tus credenciales para que master.toml funcione:"
+    say "  echo 'ALUX_DB_USER=tu_usuario' > $ENV_FILE"
+    say "  echo 'ALUX_DB_PASS=tu_password' >> $ENV_FILE"
+    say "  chmod 600 $ENV_FILE"
+  fi
+fi
+
 # --- 5. Claude Code -----------------------------------------------------------
 if command -v claude >/dev/null 2>&1; then
   if claude mcp get alux >/dev/null 2>&1; then
